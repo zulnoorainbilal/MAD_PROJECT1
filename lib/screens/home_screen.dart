@@ -62,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (date.isAfter(startOfDay)) todayTotal += grams;
       if (date.isAfter(startOfWeek)) weekTotal += grams;
 
-      totalPoints += grams ~/ 10; // same points calculation
+      totalPoints += grams ~/ 10;
     }
 
     setState(() {
@@ -96,12 +96,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final startOfThisWeek = now.subtract(Duration(days: now.weekday - 1));
     final startOfLastWeek = startOfThisWeek.subtract(const Duration(days: 7));
-    final endOfLastWeek = startOfThisWeek.subtract(const Duration(seconds: 1));
+    final endOfLastWeek =
+        startOfThisWeek.subtract(const Duration(seconds: 1));
 
     int total = 0;
     for (var log in recentLogs) {
       final date = log['date'] as DateTime;
-      if (date.isAfter(startOfLastWeek) && date.isBefore(endOfLastWeek)) {
+      if (date.isAfter(startOfLastWeek) &&
+          date.isBefore(endOfLastWeek)) {
         total += log['grams'] as int;
       }
     }
@@ -125,13 +127,25 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           },
         ),
-        title: const Text(
-          "Eco Waste Tracker",
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(
+              Icons.eco,
+              color: Colors.white,
+              size: 32, // increased icon size
+            ),
+            SizedBox(width: 8),
+            Text(
+              "Eco_Waste_Tracker",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+                fontSize: 25, // slightly increased text size
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -139,16 +153,19 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const WeeklyReportScreen()),
+                MaterialPageRoute(
+                    builder: (_) => const WeeklyReportScreen()),
               );
             },
           ),
           IconButton(
-            icon: const Icon(Icons.emoji_events_outlined, color: Colors.white),
+            icon: const Icon(Icons.emoji_events_outlined,
+                color: Colors.white),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => RewardScreen(points: points)),
+                MaterialPageRoute(
+                    builder: (_) => RewardScreen(points: points)),
               );
             },
           ),
@@ -176,26 +193,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const AdminScreen(),
-                          ),
+                              builder: (_) => const AdminScreen()),
                         );
                       },
-                      icon: const Icon(
-                        Icons.admin_panel_settings,
-                        color: Colors.white,
-                      ),
+                      icon: const Icon(Icons.admin_panel_settings,
+                          color: Colors.white),
                       label: const Text(
                         "Back to Admin Dashboard",
                         style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.teal,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
                   ),
@@ -208,7 +220,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () async {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => AddWasteScreen()),
+                    MaterialPageRoute(
+                        builder: (_) => AddWasteScreen()),
                   );
                   await _loadWasteData();
                 },
@@ -221,20 +234,19 @@ class _HomeScreenState extends State<HomeScreen> {
               const Text(
                 "Recent Logs",
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white),
               ),
               const SizedBox(height: 12),
               ...recentLogs.map(
                 (e) => Card(
                   elevation: 3,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                      borderRadius: BorderRadius.circular(12)),
                   child: ListTile(
-                    leading: const Icon(Icons.restaurant, color: Colors.teal),
+                    leading: const Icon(Icons.restaurant,
+                        color: Colors.teal),
                     title: Text("${e['grams']}g • ${e['foodType']}"),
                     subtitle: Text(
                       "${e['enteredBy']} • ${DateFormat.yMMMd().add_jm().format(e['date'])}",
@@ -252,15 +264,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.teal,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                     child: const Text(
                       "Clear All Data",
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
                     ),
                   ),
                 ),
@@ -280,7 +290,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Row(
@@ -294,9 +305,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     value,
                     style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                        fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -307,15 +316,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.teal,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 child: Text(
                   buttonText,
                   style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white),
                 ),
               ),
           ],

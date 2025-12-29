@@ -164,7 +164,7 @@ class _AddWasteScreenState extends State<AddWasteScreen> {
 
                             // Save Waste Button
                             SizedBox(
-                              width: double.infinity,
+                              width: 200,
                               height: 50,
                               child: ElevatedButton(
                                 onPressed: _saveWaste,

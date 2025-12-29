@@ -33,7 +33,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // ================== INTEGRATED LOGIN LOGIC ==================
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -48,9 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = passwordController.text.trim();
 
     try {
-      // 1. ADMIN LOGIN FLOW (Matches your Firestore Screenshot)
       if (selectedUserType == "Admin") {
-        // Querying 'admin' collection as seen in your screenshot
         final adminQuery = await _firestore
             .collection('admin')
             .where('email', isEqualTo: email)
@@ -70,7 +67,6 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // 2. STAFF / DONOR LOGIN FLOW (Uses Firebase Auth)
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -82,7 +78,6 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
-      // Determine collection based on dropdown selection
       String collectionName;
 
       if (selectedUserType == "General Staff") {
@@ -168,7 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const Text(
-                      "Eco Waste Tracker",
+                      "Eco_Waste_Tracker",
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
@@ -233,8 +228,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                 value == null ? "Select user type" : null,
                           ),
                           const SizedBox(height: 24),
+                          // ✅ Updated Login button width
                           SizedBox(
-                            width: double.infinity,
+                            width: 250, // set desired width
                             height: 50,
                             child: ElevatedButton(
                               onPressed: _loading ? null : _login,
