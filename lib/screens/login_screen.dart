@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'home_screen.dart';
 import 'signup_screen.dart';
 import 'admin_screen.dart';
@@ -14,48 +17,113 @@ class _LoginScreenState extends State<LoginScreen> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
   bool hidePassword = true;
+  bool _loading = false;
 
   String? selectedUserType;
 
   final List<String> userTypes = [
     'General Staff',
+    'Food Donor',
+    'Resturant_Chef_Staff',
     'Admin',
   ];
 
-  final List<String> adminEmails = [
-    "mrzulnoorain@gmail.com",
-    "junaid@gmail.com"
-  ];
-  final String adminPassword = "junaid";
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  void _login() {
+  // ================== INTEGRATED LOGIN LOGIC ==================
+  Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final email = emailController.text.trim();
-    final password = passwordController.text;
+    if (selectedUserType == null) {
+      _showError("Please select user type");
+      return;
+    }
 
-    if (selectedUserType == "Admin") {
-      if (adminEmails.contains(email) && password == adminPassword) {
+    setState(() => _loading = true);
+
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+    try {
+      // 1. ADMIN LOGIN FLOW (Matches your Firestore Screenshot)
+      if (selectedUserType == "Admin") {
+        // Querying 'admin' collection as seen in your screenshot
+        final adminQuery = await _firestore
+            .collection('admin')
+            .where('email', isEqualTo: email)
+            .where('password', isEqualTo: password)
+            .limit(1)
+            .get();
+
+        if (adminQuery.docs.isEmpty) {
+          _showError("You are not registered as Admin");
+          return;
+        }
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const AdminScreen()),
         );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Invalid Admin credentials")),
-        );
+        return;
       }
-    } else {
+
+      // 2. STAFF / DONOR LOGIN FLOW (Uses Firebase Auth)
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final user = userCredential.user;
+      if (user == null) {
+        _showError("Login failed");
+        return;
+      }
+
+      // Determine collection based on dropdown selection
+      String collectionName;
+
+      if (selectedUserType == "General Staff") {
+        collectionName = "general_staff";
+      } else if (selectedUserType == "Food Donor") {
+        collectionName = "food_donors";
+      } else if (selectedUserType == "Resturant_Chef_Staff") {
+        collectionName = "restaurant_staff";
+      } else {
+        _showError("Invalid user type");
+        return;
+      }
+
+      final userDoc =
+          await _firestore.collection(collectionName).doc(user.uid).get();
+
+      if (!userDoc.exists) {
+        await _auth.signOut();
+        _showError("You are not registered as $selectedUserType");
+        return;
+      }
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => HomeScreen(
-            userType: selectedUserType ?? "General Public / Household",
-          ),
+          builder: (_) => HomeScreen(userType: selectedUserType!),
         ),
       );
+    } on FirebaseAuthException catch (e) {
+      _showError(e.message ?? "Authentication failed");
+    } catch (e) {
+      _showError("Something went wrong");
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -89,11 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: Column(
                   children: [
-                    const Icon(
-                      Icons.eco,
-                      size: 80,
-                      color: Colors.teal,
-                    ),
+                    const Icon(Icons.eco, size: 80, color: Colors.teal),
                     const SizedBox(height: 12),
                     const Text(
                       "Welcome to",
@@ -103,62 +167,39 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: Colors.teal,
                       ),
                     ),
-                    const SizedBox(height: 4),
                     const Text(
                       "Eco Waste Tracker",
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
                         color: Colors.teal,
-                        letterSpacing: 1.2,
                       ),
                     ),
                     const SizedBox(height: 25),
-
                     Form(
                       key: _formKey,
                       child: Column(
                         children: [
-                          // Email Field
                           TextFormField(
                             controller: emailController,
-                            style: const TextStyle(color: Colors.black87),
-                            decoration: InputDecoration(
-                              labelText: "Email",
-                              floatingLabelBehavior: FloatingLabelBehavior.never,
-                              labelStyle: TextStyle(color: Colors.teal.shade700),
-                              filled: true,
-                              fillColor: Colors.grey.shade100,
-                              prefixIcon: const Icon(Icons.email, color: Colors.teal),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                            keyboardType: TextInputType.emailAddress,
+                            decoration: _inputDecoration("Email", Icons.email),
                             validator: (value) =>
-                                (value != null && value.contains("@"))
+                                value != null && value.contains("@")
                                     ? null
                                     : "Enter valid email",
                           ),
                           const SizedBox(height: 16),
-
-                          // Password Field
                           TextFormField(
                             controller: passwordController,
                             obscureText: hidePassword,
-                            style: const TextStyle(color: Colors.black87),
-                            decoration: InputDecoration(
-                              labelText: "Password",
-                              floatingLabelBehavior: FloatingLabelBehavior.never,
-                              labelStyle: TextStyle(color: Colors.teal.shade700),
-                              filled: true,
-                              fillColor: Colors.grey.shade100,
-                              prefixIcon: const Icon(Icons.lock, color: Colors.teal),
-                              suffixIcon: IconButton(
+                            decoration: _inputDecoration(
+                              "Password",
+                              Icons.lock,
+                              suffix: IconButton(
                                 icon: Icon(
-                                  hidePassword ? Icons.visibility_off : Icons.visibility,
-                                  color: Colors.teal,
+                                  hidePassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
                                 ),
                                 onPressed: () {
                                   setState(() {
@@ -166,53 +207,22 @@ class _LoginScreenState extends State<LoginScreen> {
                                   });
                                 },
                               ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
                             ),
                             validator: (value) =>
-                                (value != null && value.isNotEmpty)
+                                value != null && value.isNotEmpty
                                     ? null
                                     : "Enter password",
                           ),
                           const SizedBox(height: 16),
-
-                          // User Type Dropdown
                           DropdownButtonFormField<String>(
                             value: selectedUserType,
-                            icon: const Icon(Icons.arrow_drop_down, color: Colors.teal),
-                            dropdownColor: Colors.grey.shade100,
-                            style: const TextStyle(color: Colors.black87),
-                            decoration: InputDecoration(
-                              labelText: "Select User Type",
-                              floatingLabelBehavior: FloatingLabelBehavior.never,
-                              labelStyle: TextStyle(color: Colors.teal.shade700),
-                              filled: true,
-                              fillColor: Colors.grey.shade100,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
+                            decoration: _inputDecoration(
+                                "Select User Type", Icons.person),
                             items: userTypes
-                                .map(
-                                  (type) => DropdownMenuItem(
-                                    value: type,
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          type == "Admin"
-                                              ? Icons.admin_panel_settings
-                                              : Icons.person,
-                                          color: Colors.teal,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(type),
-                                      ],
-                                    ),
-                                  ),
-                                )
+                                .map((type) => DropdownMenuItem(
+                                      value: type,
+                                      child: Text(type),
+                                    ))
                                 .toList(),
                             onChanged: (value) {
                               setState(() {
@@ -223,53 +233,48 @@ class _LoginScreenState extends State<LoginScreen> {
                                 value == null ? "Select user type" : null,
                           ),
                           const SizedBox(height: 24),
-
-                          // Login Button
                           SizedBox(
                             width: double.infinity,
                             height: 50,
-                            child: ElevatedButton.icon(
-                              onPressed: _login,
-                              icon: const Icon(Icons.login),
-                              label: const Text(
-                                "Login",
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 18),
-                              ),
+                            child: ElevatedButton(
+                              onPressed: _loading ? null : _login,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.teal,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                elevation: 5,
                               ),
+                              child: _loading
+                                  ? const CircularProgressIndicator(
+                                      color: Colors.white)
+                                  : const Text(
+                                      "Login",
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                             ),
                           ),
                           const SizedBox(height: 20),
-
-                          // Signup Link
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Text(
-                                "Don’t have an account? ",
-                                style: TextStyle(
-                                    color: Colors.black87,
-                                    fontWeight: FontWeight.w500),
-                              ),
+                              const Text("Don’t have an account? "),
                               TextButton(
                                 onPressed: () {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                        builder: (_) => const SignupScreen()),
+                                      builder: (_) => const SignupScreen(),
+                                    ),
                                   );
                                 },
                                 child: const Text(
                                   "Sign Up",
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.teal,
                                     decoration: TextDecoration.underline,
                                   ),
                                 ),
@@ -285,6 +290,22 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon,
+      {Widget? suffix}) {
+    return InputDecoration(
+      labelText: label,
+      floatingLabelBehavior: FloatingLabelBehavior.never,
+      filled: true,
+      fillColor: Colors.grey.shade100,
+      prefixIcon: Icon(icon, color: Colors.teal),
+      suffixIcon: suffix,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
       ),
     );
   }

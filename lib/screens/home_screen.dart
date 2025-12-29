@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'add_waste_screen.dart';
 import 'rewards_screen.dart';
 import 'weekly_report_screen.dart';
 import 'admin_screen.dart';
-import 'login_screen.dart'; // ✅ ADD THIS
+import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String? userType;
@@ -23,59 +24,84 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Map<String, dynamic>> recentLogs = [];
 
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   @override
   void initState() {
     super.initState();
-    _loadDummyData();
+    _loadWasteData();
   }
 
-  void _loadDummyData() {
-    setState(() {
-      todayWaste = 500;
-      weekWaste = 3200;
-      points = 120;
+  Future<void> _loadWasteData() async {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
 
-      recentLogs = List.generate(6, (index) {
-        return {
-          "grams": 80 + index * 40,
-          "foodType": "Rice",
-          "enteredBy": widget.userType ?? "General",
-          "date": DateTime.now().subtract(Duration(hours: index * 4)),
-        };
+    final snapshot = await _firestore
+        .collection('waste')
+        .orderBy('date', descending: true)
+        .get();
+
+    int todayTotal = 0;
+    int weekTotal = 0;
+    int totalPoints = 0;
+    List<Map<String, dynamic>> logs = [];
+
+    for (var doc in snapshot.docs) {
+      final data = doc.data();
+      final date = (data['date'] as Timestamp).toDate();
+      final grams = data['grams'] as int;
+
+      logs.add({
+        'grams': grams,
+        'foodType': data['foodType'],
+        'enteredBy': data['enteredBy'],
+        'date': date,
       });
+
+      if (date.isAfter(startOfDay)) todayTotal += grams;
+      if (date.isAfter(startOfWeek)) weekTotal += grams;
+
+      totalPoints += grams ~/ 10; // same points calculation
+    }
+
+    setState(() {
+      todayWaste = todayTotal;
+      weekWaste = weekTotal;
+      points = totalPoints;
+      recentLogs = logs;
     });
   }
 
-  void _addWaste(int grams, String foodType, String enteredBy) {
-    setState(() {
-      todayWaste += grams;
-      weekWaste += grams;
-      points += grams ~/ 10;
-
-      recentLogs.insert(0, {
-        "grams": grams,
-        "foodType": foodType,
-        "enteredBy": enteredBy,
-        "date": DateTime.now(),
-      });
+  Future<void> _addWaste(int grams, String foodType, String enteredBy) async {
+    await _firestore.collection('waste').add({
+      'grams': grams,
+      'foodType': foodType,
+      'enteredBy': enteredBy,
+      'date': Timestamp.now(),
     });
+
+    await _loadWasteData();
   }
 
-  void _clearData() {
-    setState(() {
-      todayWaste = 0;
-      weekWaste = 0;
-      points = 0;
-      recentLogs.clear();
-    });
+  Future<void> _clearData() async {
+    final snapshot = await _firestore.collection('waste').get();
+    for (var doc in snapshot.docs) {
+      await _firestore.collection('waste').doc(doc.id).delete();
+    }
+    await _loadWasteData();
   }
 
   int _calculateLastWeekWaste() {
     final now = DateTime.now();
+    final startOfThisWeek = now.subtract(Duration(days: now.weekday - 1));
+    final startOfLastWeek = startOfThisWeek.subtract(const Duration(days: 7));
+    final endOfLastWeek = startOfThisWeek.subtract(const Duration(seconds: 1));
+
     int total = 0;
     for (var log in recentLogs) {
       final date = log['date'] as DateTime;
-      if (date.isBefore(DateTime(now.year, now.month, now.day))) {
+      if (date.isAfter(startOfLastWeek) && date.isBefore(endOfLastWeek)) {
         total += log['grams'] as int;
       }
     }
@@ -86,13 +112,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-
-      // 🔹 APP BAR WITH LOGIN REDIRECT
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
           onPressed: () {
@@ -102,7 +125,6 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           },
         ),
-
         title: const Text(
           "Eco Waste Tracker",
           style: TextStyle(
@@ -117,12 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => WeeklyReportScreen(
-                    thisWeek: weekWaste,
-                    lastWeek: _calculateLastWeekWaste(),
-                  ),
-                ),
+                MaterialPageRoute(builder: (_) => const WeeklyReportScreen()),
               );
             },
           ),
@@ -131,16 +148,12 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => RewardScreen(points: points),
-                ),
+                MaterialPageRoute(builder: (_) => RewardScreen(points: points)),
               );
             },
           ),
         ],
       ),
-
-      // 🔹 BACKGROUND
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -153,7 +166,6 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-
               if (widget.userType?.toLowerCase() == "admin")
                 Center(
                   child: SizedBox(
@@ -163,10 +175,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       onPressed: () {
                         Navigator.pushReplacement(
                           context,
-                          MaterialPageRoute(builder: (_) => const AdminScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const AdminScreen(),
+                          ),
                         );
                       },
-                      icon: const Icon(Icons.admin_panel_settings, color: Colors.white),
+                      icon: const Icon(
+                        Icons.admin_panel_settings,
+                        color: Colors.white,
+                      ),
                       label: const Text(
                         "Back to Admin Dashboard",
                         style: TextStyle(
@@ -183,9 +200,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-
               const SizedBox(height: 16),
-
               _statCard(
                 title: "Today's Waste",
                 value: "$todayWaste grams",
@@ -193,18 +208,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: () async {
                   await Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => AddWasteScreen(onAddWaste: _addWaste),
-                    ),
+                    MaterialPageRoute(builder: (_) => AddWasteScreen()),
                   );
+                  await _loadWasteData();
                 },
               ),
-
               const SizedBox(height: 14),
               _statCard(title: "This Week", value: "$weekWaste grams"),
               const SizedBox(height: 14),
               _statCard(title: "Points Earned", value: "$points pts"),
-
               const SizedBox(height: 26),
               const Text(
                 "Recent Logs",
@@ -214,9 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: Colors.white,
                 ),
               ),
-
               const SizedBox(height: 12),
-
               ...recentLogs.map(
                 (e) => Card(
                   elevation: 3,
@@ -232,9 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 26),
-
               Center(
                 child: SizedBox(
                   width: 200,

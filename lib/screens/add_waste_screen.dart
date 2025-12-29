@@ -1,10 +1,8 @@
-// add_waste_screen.dart
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AddWasteScreen extends StatefulWidget {
-  final Function(int grams, String foodType, String enteredBy) onAddWaste;
-
-  const AddWasteScreen({super.key, required this.onAddWaste});
+  const AddWasteScreen({super.key});
 
   @override
   State<AddWasteScreen> createState() => _AddWasteScreenState();
@@ -18,7 +16,15 @@ class _AddWasteScreenState extends State<AddWasteScreen> {
   final List<String> _foodTypes = ['Vegetables', 'Fruits', 'Bread', 'Meat', 'Other'];
 
   String? _selectedEnteredBy;
-  final List<String> _enteredByOptions = ['General User',  'Admin'];
+  final List<String> _enteredByOptions = [
+  'General Staff',
+  'Food Donor',
+  'Resturant_Chef_Staff',
+  'Admin',
+];
+
+
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void dispose() {
@@ -26,13 +32,30 @@ class _AddWasteScreenState extends State<AddWasteScreen> {
     super.dispose();
   }
 
-  void _saveWaste() {
+  void _saveWaste() async {
     if (_formKey.currentState!.validate() &&
         _selectedFoodType != null &&
         _selectedEnteredBy != null) {
       final grams = int.parse(_gramsController.text);
-      widget.onAddWaste(grams, _selectedFoodType!, _selectedEnteredBy!);
-      Navigator.pop(context);
+
+      try {
+        await _firestore.collection('waste').add({
+          'grams': grams,
+          'foodType': _selectedFoodType!,
+          'enteredBy': _selectedEnteredBy!,
+          'date': Timestamp.now(),
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Waste data added successfully")),
+        );
+
+        Navigator.pop(context);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error adding waste: $e")),
+        );
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please select food type and entered by")),

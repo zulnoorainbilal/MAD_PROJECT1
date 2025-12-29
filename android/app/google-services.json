@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1075052199536",
+    "project_id": "madprojectzulli",
+    "storage_bucket": "madprojectzulli.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1075052199536:android:c0bce969848b1f1af07eb5",
+        "android_client_info": {
+          "package_name": "com.example.food_waste_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC7FUSWsGgwxswqA_IeLSKR3uGmCibLfNM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,8 +1,11 @@
 // reward_screen.dart
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+//import '../services/firestore_service.dart';
 
 class RewardScreen extends StatefulWidget {
-  final int points; // Pass points from HomeScreen
+  final int points; // fallback points from HomeScreen
 
   const RewardScreen({super.key, this.points = 0});
 
@@ -11,12 +14,45 @@ class RewardScreen extends StatefulWidget {
 }
 
 class _RewardScreenState extends State<RewardScreen> {
-  late int _points;
+  int _points = 0;
+  bool _loading = true;
+
+  final _auth = FirebaseAuth.instance;
+  final _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
     super.initState();
-    _points = widget.points;
+    _points = widget.points; // fallback
+    _loadPointsFromDatabase();
+  }
+
+  /// 🔥 Fetch points from Firestore
+  Future<void> _loadPointsFromDatabase() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        setState(() {
+          _loading = false;
+        });
+        return;
+      }
+
+      final doc =
+          await _firestore.collection('users').doc(user.uid).get();
+
+      if (doc.exists && doc.data()!.containsKey('points')) {
+        setState(() {
+          _points = doc['points'];
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading reward points: $e");
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
   }
 
   String _levelName(int points) {
@@ -28,9 +64,7 @@ class _RewardScreenState extends State<RewardScreen> {
   }
 
   void _refresh() {
-    setState(() {
-      _points = _points; // Just refresh local points
-    });
+    _loadPointsFromDatabase(); // reload from Firestore
   }
 
   @override
@@ -51,11 +85,13 @@ class _RewardScreenState extends State<RewardScreen> {
             children: [
               // Top AppBar Row
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      icon:
+                          const Icon(Icons.arrow_back, color: Colors.white),
                       onPressed: () => Navigator.pop(context),
                     ),
                     const SizedBox(width: 8),
@@ -69,7 +105,8 @@ class _RewardScreenState extends State<RewardScreen> {
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.refresh, color: Colors.white),
+                      icon:
+                          const Icon(Icons.refresh, color: Colors.white),
                       onPressed: _refresh,
                     ),
                   ],
@@ -77,73 +114,79 @@ class _RewardScreenState extends State<RewardScreen> {
               ),
 
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    // Points Card
-                    Card(
-                      elevation: 6,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(22),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.emoji_events_outlined,
-                              size: 56,
-                              color: Colors.red.shade400, // changed to red
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              "$_points pts",
-                              style: const TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF263238),
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              "Level: $level",
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF607D8B),
-                              ),
-                            ),
-                          ],
+                child: _loading
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 26),
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          // Points Card
+                          Card(
+                            elevation: 6,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(22),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.emoji_events_outlined,
+                                    size: 56,
+                                    color: Colors.red.shade400,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    "$_points pts",
+                                    style: const TextStyle(
+                                      fontSize: 30,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF263238),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    "Level: $level",
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Color(0xFF607D8B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 26),
 
-                    // Badges Title
-                    const Text(
-                      "Badges Unlocked",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
+                          // Badges Title
+                          const Text(
+                            "Badges Unlocked",
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
 
-                    // Badges Wrap
-                    Wrap(
-                      spacing: 20,
-                      runSpacing: 20,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        _badge("Bronze", 50),
-                        _badge("Silver", 150),
-                        _badge("Gold", 300),
-                        _badge("Eco Master", 500),
-                      ],
-                    ),
-                  ],
-                ),
+                          // Badges
+                          Wrap(
+                            spacing: 20,
+                            runSpacing: 20,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              _badge("Bronze", 50),
+                              _badge("Silver", 150),
+                              _badge("Gold", 300),
+                              _badge("Eco Master", 500),
+                            ],
+                          ),
+                        ],
+                      ),
               ),
             ],
           ),
@@ -152,7 +195,7 @@ class _RewardScreenState extends State<RewardScreen> {
     );
   }
 
-  // Badge Widget
+  /// Badge Widget
   Widget _badge(String name, int requiredPoints) {
     final unlocked = _points >= requiredPoints;
 
@@ -163,7 +206,8 @@ class _RewardScreenState extends State<RewardScreen> {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: unlocked ? Colors.red.shade400 : Colors.grey.shade400, // unlocked = red
+            color:
+                unlocked ? Colors.red.shade400 : Colors.grey.shade400,
             boxShadow: unlocked
                 ? [
                     BoxShadow(
