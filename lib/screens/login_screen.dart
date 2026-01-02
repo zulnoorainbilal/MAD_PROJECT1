@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 
 import 'home_screen.dart';
 import 'signup_screen.dart';
@@ -18,94 +19,75 @@ class _LoginScreenState extends State<LoginScreen> {
   final passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
+  final FocusNode _emailFocus = FocusNode();
+  final FocusNode _passwordFocus = FocusNode();
+  final FocusNode _keyboardFocus = FocusNode();
+
   bool hidePassword = true;
   bool _loading = false;
-
-  String? selectedUserType;
-
-  final List<String> userTypes = [
-    'General Staff',
-    'Food Donor',
-    'Resturant_Chef_Staff',
-    'Admin',
-  ];
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    _emailFocus.dispose();
+    _passwordFocus.dispose();
+    _keyboardFocus.dispose();
+    super.dispose();
+  }
+
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (selectedUserType == null) {
-      _showError("Please select user type");
-      return;
-    }
-
     setState(() => _loading = true);
-
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
     try {
-      if (selectedUserType == "Admin") {
-        final adminQuery = await _firestore
-            .collection('admin')
-            .where('email', isEqualTo: email)
-            .where('password', isEqualTo: password)
-            .limit(1)
-            .get();
-
-        if (adminQuery.docs.isEmpty) {
-          _showError("You are not registered as Admin");
-          return;
-        }
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const AdminScreen()),
-        );
-        return;
-      }
-
-      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
+      UserCredential userCredential =
+          await _auth.signInWithEmailAndPassword(email: email, password: password);
       final user = userCredential.user;
       if (user == null) {
         _showError("Login failed");
         return;
       }
 
-      String collectionName;
+      // Check if admin
+      final adminQuery = await _firestore
+          .collection('admin')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
 
-      if (selectedUserType == "General Staff") {
-        collectionName = "general_staff";
-      } else if (selectedUserType == "Food Donor") {
-        collectionName = "food_donors";
-      } else if (selectedUserType == "Resturant_Chef_Staff") {
-        collectionName = "restaurant_staff";
-      } else {
-        _showError("Invalid user type");
+      if (adminQuery.docs.isNotEmpty) {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => const AdminScreen()));
         return;
       }
 
-      final userDoc =
-          await _firestore.collection(collectionName).doc(user.uid).get();
+      // Determine user type
+      String? userType;
+      if ((await _firestore.collection('general_staff').doc(user.uid).get()).exists) {
+        userType = "General Staff";
+      } else if ((await _firestore.collection('food_donors').doc(user.uid).get())
+          .exists) {
+        userType = "Food Donor";
+      } else if ((await _firestore.collection('restaurant_staff').doc(user.uid).get())
+          .exists) {
+        userType = "Resturant_Chef_Staff";
+      }
 
-      if (!userDoc.exists) {
+      if (userType == null) {
         await _auth.signOut();
-        _showError("You are not registered as $selectedUserType");
+        _showError("User role not found");
         return;
       }
 
       Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => HomeScreen(userType: selectedUserType!),
-        ),
-      );
+          context, MaterialPageRoute(builder: (_) => HomeScreen(userType: userType)));
     } on FirebaseAuthException catch (e) {
       _showError(e.message ?? "Authentication failed");
     } catch (e) {
@@ -116,9 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -126,161 +106,120 @@ class _LoginScreenState extends State<LoginScreen> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+        body: RawKeyboardListener(
+          focusNode: _keyboardFocus,
+          autofocus: true,
+          onKey: (event) {
+            if (event is RawKeyDownEvent) {
+              if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+                  _emailFocus.hasFocus) {
+                FocusScope.of(context).requestFocus(_passwordFocus);
+              }
+              if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+                  _passwordFocus.hasFocus) {
+                FocusScope.of(context).requestFocus(_emailFocus);
+              }
+            }
+          },
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Center(
-            child: SingleChildScrollView(
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
-                      blurRadius: 15,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    const Icon(Icons.eco, size: 80, color: Colors.teal),
-                    const SizedBox(height: 12),
-                    const Text(
-                      "Welcome to",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.teal,
-                      ),
-                    ),
-                    const Text(
-                      "Eco_Waste_Tracker",
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.teal,
-                      ),
-                    ),
-                    const SizedBox(height: 25),
-                    Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          TextFormField(
-                            controller: emailController,
-                            decoration: _inputDecoration("Email", Icons.email),
-                            validator: (value) =>
-                                value != null && value.contains("@")
-                                    ? null
-                                    : "Enter valid email",
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black26, blurRadius: 20, offset: Offset(0, 10))
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: passwordController,
-                            obscureText: hidePassword,
-                            decoration: _inputDecoration(
-                              "Password",
-                              Icons.lock,
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 4))
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(18),
+                        child: const Icon(Icons.eco, size: 64, color: Colors.white),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text("Welcome to",
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.teal)),
+                      const Text("Eco Waste Tracker",
+                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.teal)),
+                      const SizedBox(height: 28),
+                      Form(
+                        key: _formKey,
+                        child: Column(
+                          children: [
+                            _buildTextField(
+                                controller: emailController,
+                                focusNode: _emailFocus,
+                                label: "Email",
+                                icon: Icons.email,
+                                keyboardType: TextInputType.emailAddress,
+                                validator: (val) => val != null && val.contains("@") ? null : "Enter valid email"),
+                            const SizedBox(height: 18),
+                            _buildTextField(
+                              controller: passwordController,
+                              focusNode: _passwordFocus,
+                              label: "Password",
+                              icon: Icons.lock,
+                              obscureText: hidePassword,
+                              validator: (val) => val != null && val.isNotEmpty ? null : "Enter password",
                               suffix: IconButton(
-                                icon: Icon(
-                                  hidePassword
-                                      ? Icons.visibility_off
-                                      : Icons.visibility,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    hidePassword = !hidePassword;
-                                  });
-                                },
+                                icon: Icon(hidePassword ? Icons.visibility_off : Icons.visibility),
+                                onPressed: () => setState(() => hidePassword = !hidePassword),
                               ),
                             ),
-                            validator: (value) =>
-                                value != null && value.isNotEmpty
-                                    ? null
-                                    : "Enter password",
-                          ),
-                          const SizedBox(height: 16),
-                          DropdownButtonFormField<String>(
-                            value: selectedUserType,
-                            decoration: _inputDecoration(
-                                "Select User Type", Icons.person),
-                            items: userTypes
-                                .map((type) => DropdownMenuItem(
-                                      value: type,
-                                      child: Text(type),
-                                    ))
-                                .toList(),
-                            onChanged: (value) {
-                              setState(() {
-                                selectedUserType = value;
-                              });
-                            },
-                            validator: (value) =>
-                                value == null ? "Select user type" : null,
-                          ),
-                          const SizedBox(height: 24),
-                          // ✅ Updated Login button width
-                          SizedBox(
-                            width: 250, // set desired width
-                            height: 50,
-                            child: ElevatedButton(
-                              onPressed: _loading ? null : _login,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.teal,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: _loading
-                                  ? const CircularProgressIndicator(
-                                      color: Colors.white)
-                                  : const Text(
-                                      "Login",
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                            const SizedBox(height: 28),
+                            SizedBox(
+                              width: 260,
+                              height: 50,
+                              child: _highlightButton(label: _loading ? "" : "Login", onPressed: _loading ? null : _login),
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Text("Don’t have an account? "),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const SignupScreen(),
-                                    ),
-                                  );
-                                },
-                                child: const Text(
-                                  "Sign Up",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    decoration: TextDecoration.underline,
+                            if (_loading)
+                              const SizedBox(
+                                height: 50,
+                                child: Center(child: CircularProgressIndicator(color: Colors.white)),
+                              ),
+                            const SizedBox(height: 22),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text("Don’t have an account? ", style: TextStyle(fontSize: 16)),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SignupScreen()));
+                                  },
+                                  child: const Text(
+                                    "Sign Up",
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, decoration: TextDecoration.underline),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -290,18 +229,58 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  InputDecoration _inputDecoration(String label, IconData icon,
-      {Widget? suffix}) {
-    return InputDecoration(
-      labelText: label,
-      floatingLabelBehavior: FloatingLabelBehavior.never,
-      filled: true,
-      fillColor: Colors.grey.shade100,
-      prefixIcon: Icon(icon, color: Colors.teal),
-      suffixIcon: suffix,
-      border: OutlineInputBorder(
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String label,
+    required IconData icon,
+    TextInputType keyboardType = TextInputType.text,
+    bool obscureText = false,
+    String? Function(String?)? validator,
+    Widget? suffix,
+  }) {
+    return TextFormField(
+      controller: controller,
+      focusNode: focusNode,
+      keyboardType: keyboardType,
+      obscureText: obscureText,
+      textInputAction: TextInputAction.next,
+      onFieldSubmitted: (_) {
+        if (focusNode == _emailFocus) FocusScope.of(context).requestFocus(_passwordFocus);
+        if (focusNode == _passwordFocus && !_loading) _login();
+      },
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Colors.grey.shade100,
+        floatingLabelBehavior: FloatingLabelBehavior.never,
+        prefixIcon: Icon(icon, color: Colors.teal),
+        suffixIcon: suffix,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+      ),
+      validator: validator,
+    );
+  }
+
+  Widget _highlightButton({required String label, required VoidCallback? onPressed}) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(2, 3))],
+      ),
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
       ),
     );
   }

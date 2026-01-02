@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'add_waste_screen.dart';
 import 'rewards_screen.dart';
@@ -25,6 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> recentLogs = [];
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   @override
   void initState() {
@@ -35,9 +37,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadWasteData() async {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
-    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+    final startOfWeek = startOfDay.subtract(Duration(days: now.weekday - 1));
 
-    final snapshot = await _firestore
+    final wasteSnapshot = await _firestore
         .collection('waste')
         .orderBy('date', descending: true)
         .get();
@@ -47,15 +49,16 @@ class _HomeScreenState extends State<HomeScreen> {
     int totalPoints = 0;
     List<Map<String, dynamic>> logs = [];
 
-    for (var doc in snapshot.docs) {
+    for (var doc in wasteSnapshot.docs) {
       final data = doc.data();
       final date = (data['date'] as Timestamp).toDate();
-      final grams = data['grams'] as int;
+      final int grams = (data['grams'] as num?)?.toInt() ?? 0;
+      final String enteredBy = data['enteredBy'] ?? "Unknown Role";
 
       logs.add({
         'grams': grams,
-        'foodType': data['foodType'],
-        'enteredBy': data['enteredBy'],
+        'foodType': data['foodType'] ?? 'Food',
+        'enteredBy': enteredBy,
         'date': date,
       });
 
@@ -73,17 +76,6 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _addWaste(int grams, String foodType, String enteredBy) async {
-    await _firestore.collection('waste').add({
-      'grams': grams,
-      'foodType': foodType,
-      'enteredBy': enteredBy,
-      'date': Timestamp.now(),
-    });
-
-    await _loadWasteData();
-  }
-
   Future<void> _clearData() async {
     final snapshot = await _firestore.collection('waste').get();
     for (var doc in snapshot.docs) {
@@ -92,84 +84,134 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadWasteData();
   }
 
-  int _calculateLastWeekWaste() {
-    final now = DateTime.now();
-    final startOfThisWeek = now.subtract(Duration(days: now.weekday - 1));
-    final startOfLastWeek = startOfThisWeek.subtract(const Duration(days: 7));
-    final endOfLastWeek =
-        startOfThisWeek.subtract(const Duration(seconds: 1));
+  Widget _highlightButton({
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 4,
+            offset: Offset(2, 3),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
 
-    int total = 0;
-    for (var log in recentLogs) {
-      final date = log['date'] as DateTime;
-      if (date.isAfter(startOfLastWeek) &&
-          date.isBefore(endOfLastWeek)) {
-        total += log['grams'] as int;
-      }
-    }
-    return total;
+  Widget _appBarIcon({required IconData icon, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            colors: [Color(0xFF00FFD5), Color(0xFF0072FF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 3,
+              offset: Offset(1, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(5),
+        child: Icon(icon, color: Colors.white, size: 22),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = widget.userType?.toLowerCase() == "admin";
+
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-          onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-            );
-          },
-        ),
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(
-              Icons.eco,
-              color: Colors.white,
-              size: 32, // increased icon size
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: SafeArea(
+          child: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            centerTitle: true,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
+              },
             ),
-            SizedBox(width: 8),
-            Text(
-              "Eco_Waste_Tracker",
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 25, // slightly increased text size
+            title: Row(
+              children: const [
+                Icon(Icons.eco, color: Colors.white, size: 32),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Eco Waste Tracker",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              _appBarIcon(
+                icon: Icons.bar_chart_outlined,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const WeeklyReportScreen()),
+                  );
+                },
               ),
-            ),
-          ],
+              _appBarIcon(
+                icon: Icons.emoji_events_outlined,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => RewardScreen(points: points)),
+                  );
+                },
+              ),
+            ],
+          ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.bar_chart_outlined, color: Colors.white),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => const WeeklyReportScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.emoji_events_outlined,
-                color: Colors.white),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (_) => RewardScreen(points: points)),
-              );
-            },
-          ),
-        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -183,36 +225,23 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (widget.userType?.toLowerCase() == "admin")
+              if (isAdmin) ...[
                 Center(
                   child: SizedBox(
-                    width: 260,
-                    height: 45,
-                    child: ElevatedButton.icon(
+                    width: 220,
+                    child: _highlightButton(
+                      label: "Back To Admin Dashboard",
                       onPressed: () {
                         Navigator.pushReplacement(
                           context,
-                          MaterialPageRoute(
-                              builder: (_) => const AdminScreen()),
+                          MaterialPageRoute(builder: (_) => const AdminScreen()),
                         );
                       },
-                      icon: const Icon(Icons.admin_panel_settings,
-                          color: Colors.white),
-                      label: const Text(
-                        "Back to Admin Dashboard",
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
                     ),
                   ),
                 ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 20),
+              ],
               _statCard(
                 title: "Today's Waste",
                 value: "$todayWaste grams",
@@ -221,7 +250,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   await Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => AddWasteScreen()),
+                      builder: (_) =>
+                          AddWasteScreen(userType: widget.userType),
+                    ),
                   );
                   await _loadWasteData();
                 },
@@ -241,12 +272,8 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 12),
               ...recentLogs.map(
                 (e) => Card(
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
                   child: ListTile(
-                    leading: const Icon(Icons.restaurant,
-                        color: Colors.teal),
+                    leading: const Icon(Icons.restaurant, color: Colors.teal),
                     title: Text("${e['grams']}g • ${e['foodType']}"),
                     subtitle: Text(
                       "${e['enteredBy']} • ${DateFormat.yMMMd().add_jm().format(e['date'])}",
@@ -254,27 +281,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 26),
-              Center(
-                child: SizedBox(
-                  width: 200,
-                  height: 45,
-                  child: ElevatedButton(
-                    onPressed: _clearData,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text(
-                      "Clear All Data",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white),
+              if (isAdmin) ...[
+                const SizedBox(height: 26),
+                Center(
+                  child: SizedBox(
+                    width: 200,
+                    child: _highlightButton(
+                      label: "Clear All Data",
+                      onPressed: _clearData,
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -290,8 +308,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     return Card(
       elevation: 4,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Row(
@@ -311,19 +328,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             if (buttonText != null)
-              ElevatedButton(
-                onPressed: onPressed,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.teal,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text(
-                  buttonText,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white),
-                ),
+              _highlightButton(
+                label: buttonText,
+                onPressed: onPressed!,
               ),
           ],
         ),
