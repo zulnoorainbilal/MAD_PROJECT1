@@ -6,6 +6,20 @@ import 'package:intl/intl.dart';
 class WeeklyBarChart extends StatelessWidget {
   const WeeklyBarChart({super.key});
 
+  static const List<String> entities = [
+    "Admin",
+    "Food Donor",
+    "General Staff",
+    "Resturant_Chef_Staff",
+  ];
+
+  static const Map<String, Color> entityColors = {
+    "Admin": Colors.deepPurple,
+    "Food Donor": Colors.orange,
+    "General Staff": Colors.blue,
+    "Resturant_Chef_Staff": Colors.green,
+  };
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<QuerySnapshot>(
@@ -20,35 +34,41 @@ class WeeklyBarChart extends StatelessWidget {
 
         final now = DateTime.now();
 
-        // 🔹 Prepare last 7 days
-        Map<String, double> dailyWaste = {};
-        Map<String, String> dailyEnteredBy = {};
+        /// 🔹 Prepare last 7 days structure
+        final List<DateTime> days = List.generate(
+          7,
+          (i) => DateTime(now.year, now.month, now.day)
+              .subtract(Duration(days: 6 - i)),
+        );
 
-        for (int i = 6; i >= 0; i--) {
-          final date = now.subtract(Duration(days: i));
-          final label = DateFormat('EEE dd').format(date);
-          dailyWaste[label] = 0;
-          dailyEnteredBy[label] = "Unknown";
-        }
+        /// 🔹 date -> entity -> grams
+        final Map<String, Map<String, double>> groupedData = {
+          for (var d in days)
+            DateFormat('EEE dd').format(d): {
+              for (var e in entities) e: 0
+            }
+        };
 
-        // 🔹 Fill from Firestore
+        /// 🔹 Fill from Firestore
         for (var doc in snapshot.data!.docs) {
           final data = doc.data() as Map<String, dynamic>;
-
-          if (data['date'] == null || data['grams'] == null) continue;
+          if (data['date'] == null ||
+              data['grams'] == null ||
+              data['enteredBy'] == null) continue;
 
           final DateTime date = (data['date'] as Timestamp).toDate();
-          final label = DateFormat('EEE dd').format(date);
+          final String label = DateFormat('EEE dd').format(date);
+          final String entity = data['enteredBy'];
 
-          if (dailyWaste.containsKey(label)) {
-            dailyWaste[label] =
-                dailyWaste[label]! + (data['grams'] as num).toDouble();
-            dailyEnteredBy[label] = data['enteredBy'] ?? "Unknown";
+          if (groupedData.containsKey(label) &&
+              groupedData[label]!.containsKey(entity)) {
+            groupedData[label]![entity] =
+                groupedData[label]![entity]! +
+                    (data['grams'] as num).toDouble();
           }
         }
 
-        final labels = dailyWaste.keys.toList();
-        final values = dailyWaste.values.toList();
+        final labels = groupedData.keys.toList();
 
         return Card(
           elevation: 6,
@@ -61,16 +81,13 @@ class WeeklyBarChart extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  "Weekly Waste (Last 7 Days)",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  "Weekly Waste by Entity",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
 
                 SizedBox(
-                  height: 260,
+                  height: 280,
                   child: BarChart(
                     BarChartData(
                       barTouchData: BarTouchData(
@@ -79,14 +96,13 @@ class WeeklyBarChart extends StatelessWidget {
                           tooltipBgColor: Colors.black87,
                           getTooltipItem:
                               (group, groupIndex, rod, rodIndex) {
-                            final label = labels[groupIndex];
-                            final enteredBy =
-                                dailyEnteredBy[label] ?? "Unknown";
+                            final date = labels[groupIndex];
+                            final entity = entities[rodIndex];
 
                             return BarTooltipItem(
-                              '$label\n'
-                              'Waste: ${rod.toY.toInt()} g\n'
-                              'By: $enteredBy',
+                              '$date\n'
+                              '$entity\n'
+                              '${rod.toY.toInt()} grams',
                               const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w600,
@@ -133,22 +149,46 @@ class WeeklyBarChart extends StatelessWidget {
                         ),
                       ),
 
-                      barGroups: List.generate(
-                        values.length,
-                        (index) => BarChartGroupData(
-                          x: index,
-                          barRods: [
-                            BarChartRodData(
-                              toY: values[index],
-                              width: 18,
-                              borderRadius: BorderRadius.circular(6),
-                              color: Colors.teal,
-                            ),
-                          ],
-                        ),
-                      ),
+                      barGroups: List.generate(labels.length, (i) {
+                        final dayData = groupedData[labels[i]]!;
+
+                        return BarChartGroupData(
+                          x: i,
+                          barsSpace: 4,
+                          barRods: List.generate(entities.length, (j) {
+                            final entity = entities[j];
+                            return BarChartRodData(
+                              toY: dayData[entity]!,
+                              width: 10,
+                              borderRadius: BorderRadius.circular(4),
+                              color: entityColors[entity],
+                            );
+                          }),
+                        );
+                      }),
                     ),
                   ),
+                ),
+
+                const SizedBox(height: 12),
+
+                /// 🔹 Legend
+                Wrap(
+                  spacing: 12,
+                  children: entities.map((e) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          color: entityColors[e],
+                        ),
+                        const SizedBox(width: 6),
+                        Text(e, style: const TextStyle(fontSize: 12)),
+                      ],
+                    );
+                  }).toList(),
                 ),
               ],
             ),
