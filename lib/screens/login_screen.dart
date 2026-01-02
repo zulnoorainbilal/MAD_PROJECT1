@@ -43,19 +43,25 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
+
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
     try {
+      // 🔐 Firebase Auth
       UserCredential userCredential =
-          await _auth.signInWithEmailAndPassword(email: email, password: password);
+          await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
       final user = userCredential.user;
       if (user == null) {
         _showError("Login failed");
         return;
       }
 
-      // Check if admin
+      // 🔎 Admin check
       final adminQuery = await _firestore
           .collection('admin')
           .where('email', isEqualTo: email)
@@ -64,19 +70,26 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (adminQuery.docs.isNotEmpty) {
         Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (_) => const AdminScreen()));
+          context,
+          MaterialPageRoute(builder: (_) => const AdminScreen()),
+        );
         return;
       }
 
-      // Determine user type
+      // ⚡ FAST role check (PARALLEL – FIXED)
       String? userType;
-      if ((await _firestore.collection('general_staff').doc(user.uid).get()).exists) {
+
+      final results = await Future.wait([
+        _firestore.collection('general_staff').doc(user.uid).get(),
+        _firestore.collection('food_donors').doc(user.uid).get(),
+        _firestore.collection('restaurant_staff').doc(user.uid).get(),
+      ]);
+
+      if (results[0].exists) {
         userType = "General Staff";
-      } else if ((await _firestore.collection('food_donors').doc(user.uid).get())
-          .exists) {
+      } else if (results[1].exists) {
         userType = "Food Donor";
-      } else if ((await _firestore.collection('restaurant_staff').doc(user.uid).get())
-          .exists) {
+      } else if (results[2].exists) {
         userType = "Resturant_Chef_Staff";
       }
 
@@ -87,7 +100,11 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => HomeScreen(userType: userType)));
+        context,
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(userType: userType),
+        ),
+      );
     } on FirebaseAuthException catch (e) {
       _showError(e.message ?? "Authentication failed");
     } catch (e) {
@@ -98,7 +115,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -138,43 +156,62 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: const [
-                      BoxShadow(color: Colors.black26, blurRadius: 20, offset: Offset(0, 10))
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 20,
+                        offset: Offset(0, 10),
+                      )
                     ],
                   ),
                   child: Column(
                     children: [
                       Container(
+                        padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: const LinearGradient(
                             colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
                           ),
                           boxShadow: const [
-                            BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 4))
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 6,
+                              offset: Offset(0, 4),
+                            )
                           ],
                         ),
-                        padding: const EdgeInsets.all(18),
-                        child: const Icon(Icons.eco, size: 64, color: Colors.white),
+                        child: const Icon(Icons.eco,
+                            size: 64, color: Colors.white),
                       ),
                       const SizedBox(height: 16),
                       const Text("Welcome to",
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.teal)),
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.teal)),
                       const Text("Eco Waste Tracker",
-                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.teal)),
+                          style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.teal)),
                       const SizedBox(height: 28),
+
+                      /// FORM
                       Form(
                         key: _formKey,
                         child: Column(
                           children: [
                             _buildTextField(
-                                controller: emailController,
-                                focusNode: _emailFocus,
-                                label: "Email",
-                                icon: Icons.email,
-                                keyboardType: TextInputType.emailAddress,
-                                validator: (val) => val != null && val.contains("@") ? null : "Enter valid email"),
+                              controller: emailController,
+                              focusNode: _emailFocus,
+                              label: "Email",
+                              icon: Icons.email,
+                              keyboardType: TextInputType.emailAddress,
+                              validator: (val) => val != null &&
+                                      val.contains("@")
+                                  ? null
+                                  : "Enter valid email",
+                            ),
                             const SizedBox(height: 18),
                             _buildTextField(
                               controller: passwordController,
@@ -182,35 +219,54 @@ class _LoginScreenState extends State<LoginScreen> {
                               label: "Password",
                               icon: Icons.lock,
                               obscureText: hidePassword,
-                              validator: (val) => val != null && val.isNotEmpty ? null : "Enter password",
+                              validator: (val) =>
+                                  val != null && val.isNotEmpty
+                                      ? null
+                                      : "Enter password",
                               suffix: IconButton(
-                                icon: Icon(hidePassword ? Icons.visibility_off : Icons.visibility),
-                                onPressed: () => setState(() => hidePassword = !hidePassword),
+                                icon: Icon(hidePassword
+                                    ? Icons.visibility_off
+                                    : Icons.visibility),
+                                onPressed: () => setState(
+                                    () => hidePassword = !hidePassword),
                               ),
                             ),
                             const SizedBox(height: 28),
+
+                            /// ✅ FIXED LOGIN BUTTON
                             SizedBox(
                               width: 260,
                               height: 50,
-                              child: _highlightButton(label: _loading ? "" : "Login", onPressed: _loading ? null : _login),
-                            ),
-                            if (_loading)
-                              const SizedBox(
-                                height: 50,
-                                child: Center(child: CircularProgressIndicator(color: Colors.white)),
+                              child: _highlightButton(
+                                label:
+                                    _loading ? "Logging in..." : "Login",
+                                onPressed:
+                                    _loading ? null : _login,
                               ),
+                            ),
+
                             const SizedBox(height: 22),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Text("Don’t have an account? ", style: TextStyle(fontSize: 16)),
+                                const Text("Don’t have an account? "),
                                 TextButton(
                                   onPressed: () {
-                                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SignupScreen()));
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const SignupScreen(),
+                                      ),
+                                    );
                                   },
                                   child: const Text(
                                     "Sign Up",
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, decoration: TextDecoration.underline),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      decoration:
+                                          TextDecoration.underline,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -246,8 +302,11 @@ class _LoginScreenState extends State<LoginScreen> {
       obscureText: obscureText,
       textInputAction: TextInputAction.next,
       onFieldSubmitted: (_) {
-        if (focusNode == _emailFocus) FocusScope.of(context).requestFocus(_passwordFocus);
-        if (focusNode == _passwordFocus && !_loading) _login();
+        if (focusNode == _emailFocus) {
+          FocusScope.of(context).requestFocus(_passwordFocus);
+        } else if (focusNode == _passwordFocus && !_loading) {
+          _login();
+        }
       },
       decoration: InputDecoration(
         labelText: label,
@@ -256,31 +315,47 @@ class _LoginScreenState extends State<LoginScreen> {
         floatingLabelBehavior: FloatingLabelBehavior.never,
         prefixIcon: Icon(icon, color: Colors.teal),
         suffixIcon: suffix,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
       ),
       validator: validator,
     );
   }
 
-  Widget _highlightButton({required String label, required VoidCallback? onPressed}) {
+  Widget _highlightButton({
+    required String label,
+    required VoidCallback? onPressed,
+  }) {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(2, 3))],
+        boxShadow: const [
+          BoxShadow(
+              color: Colors.black26,
+              blurRadius: 6,
+              offset: Offset(2, 3))
+        ],
       ),
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
         ),
-        child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white)),
+        child: Text(
+          label,
+          style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: Colors.white),
+        ),
       ),
     );
   }

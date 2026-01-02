@@ -1,8 +1,45 @@
+# name: food_waste_app
+# description: A new Flutter project.
+# publish_to: 'none'
+
+# version: 1.0.0+7
+
+# environment:
+#   sdk: ">=3.3.0 <4.0.0"
+
+# dependencies:
+#   flutter:
+#     sdk: flutter
+
+#   cupertino_icons: ^1.0.8
+#   intl: ^0.19.0
+
+#   # Firebase (COMPATIBLE versions)
+#   firebase_core: ^3.6.0
+#   firebase_auth: ^5.3.1
+#   cloud_firestore: ^5.4.4
+
+# dev_dependencies:
+#   flutter_test:
+#     sdk: flutter
+#   flutter_lints: ^6.0.0
+#   flutter_launcher_icons: ^0.13.1
+
+# flutter:
+#   uses-material-design: true
+
+
+# flutter_launcher_icons:
+#   android: true
+#   ios: true
+#   image_path: "assets/icon/eco_logo.png"
+
+
 name: food_waste_app
 description: A new Flutter project.
 publish_to: 'none'
 
-version: 1.0.0+7
+version: 1.0.0+1
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -14,23 +51,18 @@ dependencies:
   cupertino_icons: ^1.0.8
   intl: ^0.19.0
 
-  # Firebase (COMPATIBLE versions)
+  # Firebase (Dart 3 compatible)
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1
   cloud_firestore: ^5.4.4
+
+  # Charts (NULL SAFE)
+  fl_chart: ^0.66.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
-
-
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: "assets/icon/eco_logo.png"
-

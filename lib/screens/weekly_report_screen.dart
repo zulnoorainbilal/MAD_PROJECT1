@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../widgets/weekly_bar_chart.dart';
 
 class WeeklyReportScreen extends StatefulWidget {
   const WeeklyReportScreen({super.key});
@@ -23,7 +24,7 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
     });
   }
 
-  // ✅ FIXED Firestore + Date Logic
+  // ✅ Firestore + Date Logic (UNCHANGED)
   Future<Map<String, int>> _calculateWeeklyWaste() async {
     final now = DateTime.now();
 
@@ -35,7 +36,7 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
     final endOfLastWeek = startOfThisWeek.subtract(const Duration(seconds: 1));
 
     final snapshot = await FirebaseFirestore.instance
-        .collection('waste') // ✅ CORRECT collection
+        .collection('waste')
         .get();
 
     int thisWeek = 0;
@@ -43,7 +44,7 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
 
     for (var doc in snapshot.docs) {
       final data = doc.data();
-      final Timestamp? ts = data['date']; // ✅ CORRECT field
+      final Timestamp? ts = data['date'];
 
       if (ts == null) continue;
 
@@ -77,13 +78,15 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // AppBar
+              // 🔹 Custom AppBar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      icon:
+                          const Icon(Icons.arrow_back, color: Colors.white),
                       onPressed: () => Navigator.pop(context),
                     ),
                     const SizedBox(width: 8),
@@ -96,10 +99,9 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
                       ),
                     ),
                     const Spacer(),
-
-                    // ✅ Recalculate Button (UI-safe)
                     IconButton(
-                      icon: const Icon(Icons.refresh, color: Colors.white),
+                      icon:
+                          const Icon(Icons.refresh, color: Colors.white),
                       onPressed: _recalculate,
                     ),
                   ],
@@ -111,7 +113,8 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
                   future: _weeklyFuture,
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const Center(
+                          child: CircularProgressIndicator());
                     }
 
                     final thisWeek = snapshot.data!['thisWeek']!;
@@ -138,11 +141,22 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
                     return ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        _statCard("This Week", "$thisWeek grams",
-                            Icons.calendar_today_outlined),
+                        _statCard(
+                          "This Week",
+                          "$thisWeek grams",
+                          Icons.calendar_today_outlined,
+                        ),
                         const SizedBox(height: 14),
-                        _statCard("Last Week", "$lastWeek grams",
-                            Icons.history_outlined),
+
+                        _statCard(
+                          "Last Week",
+                          "$lastWeek grams",
+                          Icons.history_outlined,
+                        ),
+                        const SizedBox(height: 24),
+
+                        // ✅✅ THIS IS THE ADDED CHART (IMPORTANT)
+                        const WeeklyBarChart(),
                         const SizedBox(height: 24),
 
                         Card(
@@ -159,7 +173,8 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
                                       ? Icons.thumb_up_alt_outlined
                                       : same
                                           ? Icons.info_outline
-                                          : Icons.warning_amber_outlined,
+                                          : Icons
+                                              .warning_amber_outlined,
                                   color: msgColor,
                                   size: 32,
                                 ),
@@ -204,13 +219,17 @@ class _WeeklyReportScreenState extends State<WeeklyReportScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 6),
-                Text(value,
-                    style: const TextStyle(
-                        fontSize: 22, fontWeight: FontWeight.bold)),
+                Text(
+                  value,
+                  style: const TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.bold),
+                ),
               ],
             ),
           ],
