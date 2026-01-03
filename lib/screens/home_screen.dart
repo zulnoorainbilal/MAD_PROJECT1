@@ -38,6 +38,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
     final startOfWeek = startOfDay.subtract(Duration(days: now.weekday - 1));
+    final startOfLastWeek = startOfWeek.subtract(Duration(days: 7));
+    final endOfLastWeek = startOfWeek.subtract(const Duration(seconds: 1));
 
     final wasteSnapshot = await _firestore
         .collection('waste')
@@ -46,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     int todayTotal = 0;
     int weekTotal = 0;
-    int totalPoints = 0;
+    int lastWeekTotal = 0;
     List<Map<String, dynamic>> logs = [];
 
     for (var doc in wasteSnapshot.docs) {
@@ -64,9 +66,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (date.isAfter(startOfDay)) todayTotal += grams;
       if (date.isAfter(startOfWeek)) weekTotal += grams;
-
-      totalPoints += grams ~/ 10;
+      if (date.isAfter(startOfLastWeek) && date.isBefore(endOfLastWeek)) {
+        lastWeekTotal += grams;
+      }
     }
+
+    // Points depend only on this week + last week
+    int totalPoints = (weekTotal ~/ 100) + (lastWeekTotal ~/ 100);
 
     setState(() {
       todayWaste = todayTotal;
@@ -196,7 +202,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const WeeklyReportScreen()),
+                    MaterialPageRoute(
+                        builder: (_) => const WeeklyReportScreen()),
                   );
                 },
               ),
@@ -205,7 +212,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => RewardScreen(points: points)),
+                    MaterialPageRoute(
+                        builder: (_) => RewardScreen(points: points)),
                   );
                 },
               ),
